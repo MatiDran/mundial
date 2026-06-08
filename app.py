@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, request, redirect, url_for, session, flash
+from flask import Flask, render_template_string, request, redirect, url_for, session, flash, get_flashed_messages
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
@@ -15,6 +15,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
+    pin_hash = db.Column(db.String(200), nullable=False)  # NOWE: Bezpiecznie przechowywany PIN ratunkowy
     points = db.Column(db.Integer, default=0)
     is_admin = db.Column(db.Boolean, default=False)
 
@@ -24,6 +25,8 @@ class Bet(db.Model):
     match_id = db.Column(db.Integer, nullable=False)
     predicted = db.Column(db.String(1), nullable=False)
     processed = db.Column(db.Boolean, default=False)
+    
+    user = db.relationship('User', backref=db.backref('bets', lazy=True))
 
 # --- DEKORATORY ---
 def login_required(f):
@@ -45,7 +48,7 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# --- TŁUMACZENIA ---
+# --- TŁUMACZENIA I FLAGI ---
 TLUMACZENIA = {
     'Algeria': 'Algieria', 'Argentina': 'Argentyna', 'Australia': 'Australia',
     'Austria': 'Austria', 'Belgium': 'Belgia', 'Bosnia-Herzegovina': 'Bośnia i Hercegowina',
@@ -124,17 +127,22 @@ def wyznacz_wynik(score_home, score_away):
     return 'X'
 
 def rozlicz():
-    for mecz in pobierz_mecze():
+    mecze = pobierz_mecze()
+    for mecz in mecze:
         if mecz['status'] != 'FINISHED':
             continue
         if mecz['score_home'] is None or mecz['score_away'] is None:
             continue
+        
         real_result = wyznacz_wynik(mecz['score_home'], mecz['score_away'])
         typy = Bet.query.filter_by(match_id=mecz['id'], processed=False).all()
+        
         for t in typy:
-            if t.predicted == real_result:
-                db.session.get(User, t.user_id).points += 1
-            t.processed = True
+            user = db.session.get(User, t.user_id)
+            if user:
+                if t.predicted == real_result:
+                    user.points += 1
+                t.processed = True
     db.session.commit()
 
 # --- STYLE WSPÓLNE ---
@@ -154,15 +162,14 @@ input:focus { border-color: #f0c040; }
 .flash.success { background: rgba(46,125,50,0.2); border: 1px solid #388e3c; color: #a5d6a7; }
 """
 
-# --- HTML: LOGIN ---
+# --- HTML TEMPLATES ---
 DOZWOLONE_IMIONA = ['Antek', 'Kuba', 'Dawid', 'Mati M', 'Mati K', 'Franek']
 
 LOGIN_TEMPLATE = """
 <!DOCTYPE html><html lang="pl"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Typer MŚ 2026 — Logowanie</title>
-<style>
-""" + BASE_STYLE + """
+<style>""" + BASE_STYLE + """
 .center { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
 .card { background: #162032; border: 1px solid #1e3a5f; border-radius: 16px; padding: 40px; width: 100%; max-width: 380px; }
 .logo { font-size: 28px; font-weight: 800; color: #f0c040; text-align: center; margin-bottom: 8px; }
@@ -174,7 +181,7 @@ label { display: block; font-size: 12px; color: #90caf9; margin-bottom: 6px; fon
 .name-option:hover { border-color: #f0c040; }
 .name-option input[type=radio] { accent-color: #f0c040; width: 16px; height: 16px; }
 .name-option span { font-weight: 600; font-size: 14px; }
-.link { text-align: center; margin-top: 20px; font-size: 13px; color: #546e7a; }
+.link { text-align: center; margin-top: 15px; font-size: 13px; color: #546e7a; }
 .link a { color: #90caf9; }
 </style></head><body>
 <div class="center">
@@ -182,7 +189,8 @@ label { display: block; font-size: 12px; color: #90caf9; margin-bottom: 6px; fon
     <div class="logo">🏆 Typer MŚ</div>
     <div class="subtitle">Mistrzostwa Świata 2026</div>
     {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
-    {% if success %}<div class="flash success">{{ success }}</div>{% endif %}
+    {% set messages = get_flashed_messages(category_filter=['success']) %}
+    {% for msg in messages %}<div class="flash success">{{ msg }}</div>{% endfor %}
     <form method="POST">
       <div class="form-group">
         <label>Wybierz swoje imię</label>
@@ -202,18 +210,17 @@ label { display: block; font-size: 12px; color: #90caf9; margin-bottom: 6px; fon
       <button type="submit" class="btn" style="width:100%; margin-top:8px;">Zaloguj się</button>
     </form>
     <div class="link">Nie masz konta? <a href="/register">Zarejestruj się</a></div>
+    <div class="link" style="margin-top: 8px;"><a href="/odzyskaj" style="color: #f0c040;">Zapomniałem hasła (Reset PIN)</a></div>
   </div>
 </div>
 </body></html>
 """
 
-# --- HTML: REGISTER ---
 REGISTER_TEMPLATE = """
 <!DOCTYPE html><html lang="pl"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Typer MŚ 2026 — Rejestracja</title>
-<style>
-""" + BASE_STYLE + """
+<style>""" + BASE_STYLE + """
 .center { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
 .card { background: #162032; border: 1px solid #1e3a5f; border-radius: 16px; padding: 40px; width: 100%; max-width: 380px; }
 .logo { font-size: 28px; font-weight: 800; color: #f0c040; text-align: center; margin-bottom: 8px; }
@@ -234,7 +241,6 @@ label { display: block; font-size: 12px; color: #90caf9; margin-bottom: 6px; fon
     <div class="logo">🏆 Typer MŚ</div>
     <div class="subtitle">Utwórz konto</div>
     {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
-    {% if success %}<div class="flash success">{{ success }}</div>{% endif %}
     <form method="POST">
       <div class="form-group">
         <label>Wybierz swoje imię</label>
@@ -251,7 +257,11 @@ label { display: block; font-size: 12px; color: #90caf9; margin-bottom: 6px; fon
         <label>Hasło</label>
         <input type="password" name="password" placeholder="Min. 6 znaków" required minlength="6">
       </div>
-      <button type="submit" class="btn" style="width:100%; margin-top:8px;">Zarejestruj się</button>
+      <div class="form-group" style="margin-top:16px;">
+        <label style="color: #ffb74d;">Sekretny PIN awaryjny (do resetu)</label>
+        <input type="password" name="pin" placeholder="Np. 4 cyfry" required minlength="4">
+      </div>
+      <button type="submit" class="btn" style="width:100%; margin-top:12px;">Zarejestruj się</button>
     </form>
     <div class="link">Masz już konto? <a href="/login">Zaloguj się</a></div>
   </div>
@@ -259,13 +269,56 @@ label { display: block; font-size: 12px; color: #90caf9; margin-bottom: 6px; fon
 </body></html>
 """
 
-# --- HTML: ADMIN ---
+ODZYSKAJ_TEMPLATE = """
+<!DOCTYPE html><html lang="pl"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Odzyskiwanie hasła</title>
+<style>""" + BASE_STYLE + """
+.center { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+.card { background: #162032; border: 1px solid #1e3a5f; border-radius: 16px; padding: 40px; width: 100%; max-width: 380px; }
+.logo { font-size: 24px; font-weight: 800; color: #ffb74d; text-align: center; margin-bottom: 8px; }
+.subtitle { text-align: center; color: #90caf9; font-size: 13px; margin-bottom: 24px; }
+.form-group { margin-bottom: 16px; }
+label { display: block; font-size: 12px; color: #90caf9; margin-bottom: 6px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
+.link { text-align: center; margin-top: 20px; font-size: 13px; color: #546e7a; }
+.link a { color: #90caf9; }
+</style></head><body>
+<div class="center">
+  <div class="card">
+    <div class="logo">🔐 Reset Hasła</div>
+    <div class="subtitle">Użyj swojego PINu ratunkowego</div>
+    {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+    <form method="POST">
+      <div class="form-group">
+        <label>Wybierz swoje imię</label>
+        <select name="username" required style="width:100%;">
+            <option value="" disabled selected>-- Wybierz z listy --</option>
+            {% for imie in imiona %}
+            <option value="{{ imie }}">{{ imie }}</option>
+            {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Twój PIN ratunkowy</label>
+        <input type="password" name="pin" placeholder="Wpisz PIN podany przy rejestracji" required>
+      </div>
+      <div class="form-group">
+        <label>Nowe Hasło</label>
+        <input type="password" name="nowe_haslo" placeholder="Min. 6 znaków" required minlength="6">
+      </div>
+      <button type="submit" class="btn" style="width:100%; margin-top:8px; background: #ffb74d;">Zmień i zapisz hasło</button>
+    </form>
+    <div class="link"><a href="/login">← Wróć do logowania</a></div>
+  </div>
+</div>
+</body></html>
+"""
+
 ADMIN_TEMPLATE = """
 <!DOCTYPE html><html lang="pl"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel Admina</title>
-<style>
-""" + BASE_STYLE + """
+<style>""" + BASE_STYLE + """
 header { background: #162032; border-bottom: 1px solid #1e3a5f; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
 .logo { font-size: 18px; font-weight: 700; color: #f0c040; }
 main { max-width: 700px; margin: 32px auto; padding: 0 20px; }
@@ -281,7 +334,7 @@ h2 { color: #f0c040; margin-bottom: 20px; font-size: 18px; }
   <a href="/" class="btn btn-ghost" style="padding:6px 14px; font-size:13px;">← Główna</a>
 </header>
 <main>
-  {% for msg, cat in messages %}
+  {% for cat, msg in messages %}
   <div class="flash {{ cat }}">{{ msg }}</div>
   {% endfor %}
   <h2>Zarządzanie graczami ({{ users|length }}/10)</h2>
@@ -308,15 +361,13 @@ h2 { color: #f0c040; margin-bottom: 20px; font-size: 18px; }
 </body></html>
 """
 
-# --- HTML: GŁÓWNA ---
 MAIN_TEMPLATE = """
 <!DOCTYPE html><html lang="pl"><head>
 <meta charset="UTF-8">
 <meta http-equiv="refresh" content="120">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Typer MŚ 2026</title>
-<style>
-""" + BASE_STYLE + """
+<style>""" + BASE_STYLE + """
 header { background: linear-gradient(135deg, #1a2a3a, #0f1923); padding: 20px 0 0; border-bottom: 1px solid #1e3a5f; }
 .header-top { max-width: 860px; margin: 0 auto; padding: 0 20px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .logo { font-size: 20px; font-weight: 700; color: #f0c040; }
@@ -421,6 +472,7 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
       <div class="user-tip">Twój typ: <strong>{{ typy_user.get(mecz.id) or 'Brak' }}</strong></div>
     {% elif czas_do_meczu > 60 %}
       <span class="badge open">✅ Można obstawiać · zostało {{ (czas_do_meczu/60)|int }}h</span>
+    <div id="mecz-{{ mecz.id }}">
       <form action="/obstaw" method="POST">
         <input type="hidden" name="match_id" value="{{ mecz.id }}">
         <div class="bet-buttons">
@@ -429,6 +481,7 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
           <button type="submit" name="predicted" value="2" class="bet-btn {% if typy_user.get(mecz.id) == '2' %}selected{% endif %}">2</button>
         </div>
       </form>
+    </div>
     {% else %}
       <span class="badge locked">🔒 Zablokowane</span>
       <div class="user-tip">Twój typ: <strong>{{ typy_user.get(mecz.id) or 'Brak' }}</strong></div>
@@ -524,7 +577,9 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
 def login():
     error = None
     if request.method == 'POST':
-        username = request.form.get('username') or 'admin'
+        username = request.form.get('username')
+        if not username:
+            username = 'admin'
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, request.form['password']):
             session['user_id'] = user.id
@@ -536,23 +591,53 @@ def login():
 def register():
     zajete = [u.username for u in User.query.filter(User.username.in_(DOZWOLONE_IMIONA)).all()]
     error = None
-    success = None
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
+        pin = request.form.get('pin', '').strip()
+        
         if username not in DOZWOLONE_IMIONA:
             error = 'Wybierz imię z listy.'
         elif username in zajete:
             error = 'To imię jest już zajęte.'
         elif len(password) < 6:
             error = 'Hasło musi mieć min. 6 znaków.'
+        elif len(pin) < 4:
+            error = 'PIN ratunkowy musi mieć min. 4 znaki.'
         else:
-            db.session.add(User(username=username, password_hash=generate_password_hash(password)))
+            db.session.add(User(
+                username=username, 
+                password_hash=generate_password_hash(password),
+                pin_hash=generate_password_hash(pin) # NOWE: Szyfrowanie i zapis PINu
+            ))
             db.session.commit()
             flash('Konto utworzone! Możesz się zalogować.', 'success')
             return redirect(url_for('login'))
         zajete = [u.username for u in User.query.filter(User.username.in_(DOZWOLONE_IMIONA)).all()]
     return render_template_string(REGISTER_TEMPLATE, error=error, imiona=DOZWOLONE_IMIONA, zajete=zajete)
+
+# NOWA TRASA: ODZYSKIWANIE HASŁA SAMODZIELNIE PRZEZ GRACZA
+@app.route('/odzyskaj', methods=['GET', 'POST'])
+def odzyskaj():
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username')
+        pin = request.form.get('pin', '').strip()
+        nowe_haslo = request.form.get('nowe_haslo', '')
+        
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.pin_hash, pin):
+            if len(nowe_haslo) < 6:
+                error = 'Nowe hasło musi mieć min. 6 znaków.'
+            else:
+                user.password_hash = generate_password_hash(nowe_haslo)
+                db.session.commit()
+                flash('Hasło pomyślnie zmienione! Możesz się zalogować.', 'success')
+                return redirect(url_for('login'))
+        else:
+            error = 'Nieprawidłowe imię lub PIN ratunkowy!'
+            
+    return render_template_string(ODZYSKAJ_TEMPLATE, error=error, imiona=DOZWOLONE_IMIONA)
 
 @app.route('/logout')
 def logout():
@@ -564,7 +649,7 @@ def logout():
 @admin_required
 def admin():
     users = User.query.filter_by(is_admin=False).order_by(User.points.desc()).all()
-    return render_template_string(ADMIN_TEMPLATE, users=users, messages=get_flashed_messages_with_categories())
+    return render_template_string(ADMIN_TEMPLATE, users=users, messages=get_flashed_messages(with_categories=True))
 
 @app.route('/admin/punkty/<int:user_id>', methods=['POST'])
 @admin_required
@@ -614,14 +699,15 @@ def index():
 
     typy_user = {b.match_id: b.predicted for b in Bet.query.filter_by(user_id=current_user.id).all()}
 
-    # Typy wszystkich graczy — widoczne tylko po blokadzie
     wszystkie_typy = {}
-    for b in Bet.query.join(User).filter(User.is_admin == False).all():
+    all_bets = Bet.query.join(User).filter(User.is_admin == False).all()
+    
+    for b in all_bets:
         czas = next((m['date'] for m in mecze if m['id'] == b.match_id), None)
         status = next((m['status'] for m in mecze if m['id'] == b.match_id), None)
         zablokowany = (czas and (czas - teraz).total_seconds() / 60 <= 60) or status in ('IN_PLAY', 'PAUSED', 'LIVE', 'FINISHED')
         if zablokowany:
-            wszystkie_typy.setdefault(b.match_id, {})[User.query.get(b.user_id).username] = b.predicted
+            wszystkie_typy.setdefault(b.match_id, {})[b.user.username] = b.predicted
 
     return render_template_string(
         MAIN_TEMPLATE,
@@ -648,18 +734,7 @@ def obstaw():
     else:
         db.session.add(Bet(user_id=user_id, match_id=match_id, predicted=predicted))
     db.session.commit()
-    return redirect(url_for('index'))
-
-# --- HELPER ---
-def get_flashed_messages_with_categories():
-    from flask import get_flashed_messages
-    return get_flashed_messages(with_categories=True)
-
-# --- START ---
-def create_app(db_uri=None):
-    if db_uri:
-        app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
-    return app
+    return redirect(url_for('index') + f'#mecz-{match_id}')
 
 if __name__ == '__main__':
     with app.app_context():
@@ -668,7 +743,8 @@ if __name__ == '__main__':
             db.session.add(User(
                 username='admin',
                 password_hash=generate_password_hash('admin123@'),
+                pin_hash=generate_password_hash('0000'), # Domyślny PIN dla admina
                 is_admin=True
             ))
             db.session.commit()
-    app.run(debug=True)
+    app.run(debug=True, port=5001)

@@ -104,7 +104,7 @@ def pobierz_mecze():
                 'away': TLUMACZENIA.get(away_en, away_en),
                 'home_flaga': FLAGI.get(home_en, ''),
                 'away_flaga': FLAGI.get(away_en, ''),
-                'date': datetime.fromisoformat(m['utcDate'].replace('Z', '+00:00')).astimezone().replace(tzinfo=None),
+                'date': datetime.fromisoformat(m['utcDate'].replace('Z', '+00:00')).replace(tzinfo=None) + timedelta(hours=2),
                 'status': m['status'],
                 'score_home': score['home'],
                 'score_away': score['away'],

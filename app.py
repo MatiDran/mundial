@@ -392,6 +392,7 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
     <a href="/?tab=mecze" class="{% if tab == 'mecze' %}active{% endif %}">⚽ Mecze</a>
     <a href="/?tab=historia" class="{% if tab == 'historia' %}active{% endif %}">📋 Historia</a>
     <a href="/?tab=tabela" class="{% if tab == 'tabela' %}active{% endif %}">📊 Tabela</a>
+    <a href="/?tab=mistrz" class="{% if tab == 'mistrz' %}active{% endif %}">🏆 Mistrz</a>
   </nav>
 </header>
 <main>
@@ -491,6 +492,28 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
     </div>
     {% endfor %}
   </div>
+{% elif tab == 'mistrz' %}
+  <div class="leaderboard">
+    <div class="leaderboard-row header">
+      <div style="flex:1">Gracz</div>
+      <div style="flex:1">Typ na mistrza</div>
+    </div>
+    {% set typy_mistrz = [
+      ('Mati M', 'Anglia'),
+      ('Mati K', 'Hiszpania'),
+      ('Kuba', 'Francja'),
+      ('Antek', 'Brazylia'),
+      ('Dawid', 'Portugalia'),
+      ('Franek', 'Argentyna')
+    ] %}
+    {% for gracz, druzyna in typy_mistrz %}
+    <div class="leaderboard-row">
+      <div class="player-name" style="flex:1">{{ gracz }}</div>
+      <div style="flex:1">{{ druzyna }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <p style="text-align:center;color:#888;margin-top:16px;font-size:13px;">+5 punktów dla gracza, którego typ zostanie mistrzem turnieju</p>
 {% endif %}
 
 </main></body></html>

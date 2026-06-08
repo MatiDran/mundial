@@ -194,6 +194,7 @@ label { display: block; font-size: 12px; color: #90caf9; margin-bottom: 6px; fon
           </label>
           {% endfor %}
         </div>
+        <input type="text" name="username" placeholder="admin? wpisz tutaj" style="margin-top:8px;width:100%;background:#1a2a3a;border:1px solid #1e3a5f;color:#e0e0e0;padding:10px;border-radius:8px;" autocomplete="off">
       </div>
       <div class="form-group" style="margin-top:16px;">
         <label>Hasło</label>
@@ -501,7 +502,8 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
 def login():
     error = None
     if request.method == 'POST':
-        user = User.query.filter_by(username=request.form.get('username')).first()
+        username = request.form.get('username') or 'admin'
+        user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, request.form['password']):
             session['user_id'] = user.id
             return redirect(url_for('index'))

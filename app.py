@@ -189,12 +189,11 @@ label { display: block; font-size: 12px; color: #90caf9; margin-bottom: 6px; fon
         <div class="names-grid">
           {% for imie in imiona %}
           <label class="name-option">
-            <input type="radio" name="username" value="{{ imie }}" required>
+            <input type="radio" name="username" value="{{ imie }}">
             <span>{{ imie }}</span>
           </label>
           {% endfor %}
         </div>
-        <input type="text" name="username" placeholder="admin? wpisz tutaj" style="margin-top:8px;width:100%;background:#1a2a3a;border:1px solid #1e3a5f;color:#e0e0e0;padding:10px;border-radius:8px;" autocomplete="off">
       </div>
       <div class="form-group" style="margin-top:16px;">
         <label>Hasło</label>

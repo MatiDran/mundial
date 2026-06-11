@@ -98,14 +98,15 @@ def pobierz_mecze():
         for m in resp.json().get('matches', []):
             score = m['score']['fullTime']
             # Zmieniony sposób parsowania - teraz serwer operuje na czasie lokalnym
-            dt = datetime.fromisoformat(m['utcDate'].replace('Z', '+00:00')).replace(tzinfo=None)
+            dt = datetime.fromisoformat(m['utcDate'].replace('Z', '+00:00'))
+            dt_polski = dt.astimezone(timezone(timedelta(hours=2)))
             mecze.append({
                 'id': m['id'],
                 'home': TLUMACZENIA.get(m['homeTeam']['name'], m['homeTeam']['name']),
                 'away': TLUMACZENIA.get(m['awayTeam']['name'], m['awayTeam']['name']),
                 'home_flaga': FLAGI.get(m['homeTeam']['name'], ''),
                 'away_flaga': FLAGI.get(m['awayTeam']['name'], ''),
-                'date': dt,
+                'date': dt_polski.replace(tzinfo=None),
                 'status': m['status'],
                 'score_home': score['home'],
                 'score_away': score['away'],

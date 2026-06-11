@@ -686,7 +686,7 @@ def index():
     current_user = db.session.get(User, session['user_id'])
     users = User.query.filter_by(is_admin=False).order_by(User.points.desc()).all()
     mecze = pobierz_mecze()
-    teraz = datetime.now() # Dzięki ustawieniom na górze, teraz to czas lokalny (PL)
+    teraz = datetime.now().replace(tzinfo=None) # Dzięki ustawieniom na górze, teraz to czas lokalny (PL)
 
     typy_user = {b.match_id: b.predicted for b in Bet.query.filter_by(user_id=current_user.id).all()}
 
@@ -717,7 +717,7 @@ def obstaw():
     mecz = next((m for m in pobierz_mecze() if m['id'] == match_id), None)
     if not mecz:
         return 'Mecz nie istnieje', 404
-    if (mecz['date'] - datetime.now()).total_seconds() / 60 <= 60:
+    if (mecz['date'] - datetime.now().replace(tzinfo=None)).total_seconds() / 60 <= 60:
         return 'BŁĄD: Czas na obstawianie minął!', 400
     istniejacy = Bet.query.filter_by(user_id=user_id, match_id=match_id).first()
     if istniejacy:

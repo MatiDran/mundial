@@ -105,7 +105,7 @@ def pobierz_mecze():
                 'away': TLUMACZENIA.get(m['awayTeam']['name'], m['awayTeam']['name']),
                 'home_flaga': FLAGI.get(m['homeTeam']['name'], ''),
                 'away_flaga': FLAGI.get(m['awayTeam']['name'], ''),
-                'date': dt + timedelta(hours=2),
+                'date': dt,
                 'status': m['status'],
                 'score_home': score['home'],
                 'score_away': score['away'],

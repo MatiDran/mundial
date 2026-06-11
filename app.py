@@ -1,3 +1,8 @@
+import os
+os.environ['TZ'] = 'Europe/Warsaw'
+import time
+time.tzset()
+
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash, get_flashed_messages
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -15,7 +20,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
-    pin_hash = db.Column(db.String(200), nullable=False)  # NOWE: Bezpiecznie przechowywany PIN ratunkowy
+    pin_hash = db.Column(db.String(200), nullable=False)
     points = db.Column(db.Integer, default=0)
     is_admin = db.Column(db.Boolean, default=False)
 
@@ -25,26 +30,22 @@ class Bet(db.Model):
     match_id = db.Column(db.Integer, nullable=False)
     predicted = db.Column(db.String(1), nullable=False)
     processed = db.Column(db.Boolean, default=False)
-    
     user = db.relationship('User', backref=db.backref('bets', lazy=True))
 
 # --- DEKORATORY ---
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
+        if 'user_id' not in session: return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated
 
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
+        if 'user_id' not in session: return redirect(url_for('login'))
         user = db.session.get(User, session['user_id'])
-        if not user or not user.is_admin:
-            return redirect(url_for('index'))
+        if not user or not user.is_admin: return redirect(url_for('index'))
         return f(*args, **kwargs)
     return decorated
 
@@ -90,24 +91,21 @@ _cache = {'data': None, 'ts': None}
 
 def pobierz_mecze():
     now = datetime.now()
-    if _cache['data'] and _cache['ts'] and (now - _cache['ts']).seconds < 120:
-        return _cache['data']
+    if _cache['data'] and _cache['ts'] and (now - _cache['ts']).seconds < 120: return _cache['data']
     try:
         resp = requests.get(API_URL, headers={'X-Auth-Token': API_KEY}, timeout=5)
         mecze = []
         for m in resp.json().get('matches', []):
             score = m['score']['fullTime']
-            home_en = m['homeTeam']['name'] or ''
-            away_en = m['awayTeam']['name'] or ''
-            if not home_en or not away_en:
-                continue
+            # Zmieniony sposób parsowania - teraz serwer operuje na czasie lokalnym
+            dt = datetime.fromisoformat(m['utcDate'].replace('Z', '+00:00')).replace(tzinfo=None)
             mecze.append({
                 'id': m['id'],
-                'home': TLUMACZENIA.get(home_en, home_en),
-                'away': TLUMACZENIA.get(away_en, away_en),
-                'home_flaga': FLAGI.get(home_en, ''),
-                'away_flaga': FLAGI.get(away_en, ''),
-                'date': datetime.fromisoformat(m['utcDate'].replace('Z', '+00:00')).replace(tzinfo=None) + timedelta(hours=2),
+                'home': TLUMACZENIA.get(m['homeTeam']['name'], m['homeTeam']['name']),
+                'away': TLUMACZENIA.get(m['awayTeam']['name'], m['awayTeam']['name']),
+                'home_flaga': FLAGI.get(m['homeTeam']['name'], ''),
+                'away_flaga': FLAGI.get(m['awayTeam']['name'], ''),
+                'date': dt + timedelta(hours=2),
                 'status': m['status'],
                 'score_home': score['home'],
                 'score_away': score['away'],
@@ -115,8 +113,7 @@ def pobierz_mecze():
         _cache['data'] = mecze
         _cache['ts'] = now
         return mecze
-    except Exception:
-        return _cache['data'] or []
+    except: return _cache['data'] or []
 
 # --- LOGIKA PUNKTÓW ---
 def wyznacz_wynik(score_home, score_away):
@@ -129,19 +126,11 @@ def wyznacz_wynik(score_home, score_away):
 def rozlicz():
     mecze = pobierz_mecze()
     for mecz in mecze:
-        if mecz['status'] != 'FINISHED':
-            continue
-        if mecz['score_home'] is None or mecz['score_away'] is None:
-            continue
-        
-        real_result = wyznacz_wynik(mecz['score_home'], mecz['score_away'])
-        typy = Bet.query.filter_by(match_id=mecz['id'], processed=False).all()
-        
-        for t in typy:
-            user = db.session.get(User, t.user_id)
-            if user:
-                if t.predicted == real_result:
-                    user.points += 1
+        if mecz['status'] == 'FINISHED' and mecz['score_home'] is not None:
+            res = '1' if mecz['score_home'] > mecz['score_away'] else ('2' if mecz['score_home'] < mecz['score_away'] else 'X')
+            for t in Bet.query.filter_by(match_id=mecz['id'], processed=False).all():
+                u = db.session.get(User, t.user_id)
+                if u and t.predicted == res: u.points += 1
                 t.processed = True
     db.session.commit()
 
@@ -695,7 +684,7 @@ def index():
     current_user = db.session.get(User, session['user_id'])
     users = User.query.filter_by(is_admin=False).order_by(User.points.desc()).all()
     mecze = pobierz_mecze()
-    teraz = datetime.now()
+    teraz = datetime.now() # Dzięki ustawieniom na górze, teraz to czas lokalny (PL)
 
     typy_user = {b.match_id: b.predicted for b in Bet.query.filter_by(user_id=current_user.id).all()}
 
@@ -740,11 +729,6 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         if not User.query.filter_by(is_admin=True).first():
-            db.session.add(User(
-                username='admin',
-                password_hash=generate_password_hash('admin123@'),
-                pin_hash=generate_password_hash('0000'), # Domyślny PIN dla admina
-                is_admin=True
-            ))
+            db.session.add(User(username='admin', password_hash=generate_password_hash('admin123@'), pin_hash=generate_password_hash('0000'), is_admin=True))
             db.session.commit()
     app.run(debug=True, port=5001)

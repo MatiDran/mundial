@@ -492,9 +492,16 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
   {% if not zakonczone %}<p class="empty">Brak zakończonych meczów.</p>{% endif %}
   {% for mecz in zakonczone %}
   {% set moj_typ = typy_user.get(mecz.id) %}
-  {% if mecz.score_home > mecz.score_away %}{% set wynik = '1' %}
-  {% elif mecz.score_home < mecz.score_away %}{% set wynik = '2' %}
-  {% else %}{% set wynik = 'X' %}{% endif %}
+  
+  {# ZABEZPIECZENIE: sprawdzamy czy wyniki nie są None #}
+  {% if mecz.score_home is not none and mecz.score_away is not none %}
+      {% if mecz.score_home > mecz.score_away %}{% set wynik = '1' %}
+      {% elif mecz.score_home < mecz.score_away %}{% set wynik = '2' %}
+      {% else %}{% set wynik = 'X' %}{% endif %}
+  {% else %}
+      {% set wynik = None %}
+  {% endif %}
+
   <div class="history-card">
     <div class="history-teams">
       <div class="history-match">
@@ -504,9 +511,11 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
       </div>
       <div class="history-date">{{ mecz.date.strftime('%d.%m.%Y %H:%M') }}</div>
     </div>
-    <div class="history-score">{{ mecz.score_home }}:{{ mecz.score_away }}</div>
+    <div class="history-score">
+        {% if mecz.score_home is not none %}{{ mecz.score_home }}:{{ mecz.score_away }}{% else %}-:-{% endif %}
+    </div>
     <div class="tip-result">
-      {% if moj_typ %}
+      {% if moj_typ and wynik %}
         {% if moj_typ == wynik %}<div class="tip-value hit">✓ {{ moj_typ }}</div>
         {% else %}<div class="tip-value miss">✗ {{ moj_typ }}</div>{% endif %}
       {% else %}<div class="no-tip">brak</div>{% endif %}

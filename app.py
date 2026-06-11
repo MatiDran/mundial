@@ -493,7 +493,7 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
   {% for mecz in zakonczone %}
   {% set moj_typ = typy_user.get(mecz.id) %}
   
-  {# ZABEZPIECZENIE: sprawdzamy czy wyniki nie są None #}
+  {# Logika wyniku #}
   {% if mecz.score_home is not none and mecz.score_away is not none %}
       {% if mecz.score_home > mecz.score_away %}{% set wynik = '1' %}
       {% elif mecz.score_home < mecz.score_away %}{% set wynik = '2' %}
@@ -511,9 +511,16 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
       </div>
       <div class="history-date">{{ mecz.date.strftime('%d.%m.%Y %H:%M') }}</div>
     </div>
+    
+    {# TUTAJ JEST NAPRAWA WYŚWIETLANIA #}
     <div class="history-score">
-        {% if mecz.score_home is not none %}{{ mecz.score_home }}:{{ mecz.score_away }}{% else %}-:-{% endif %}
+      {% if mecz.score_home is not none and mecz.score_away is not none %}
+          {{ mecz.score_home }}:{{ mecz.score_away }}
+      {% else %}
+          -:-
+      {% endif %}
     </div>
+    
     <div class="tip-result">
       {% if moj_typ and wynik %}
         {% if moj_typ == wynik %}<div class="tip-value hit">✓ {{ moj_typ }}</div>

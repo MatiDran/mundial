@@ -162,6 +162,7 @@ LOGIN_TEMPLATE = """
 <title>Typer MŚ 2026 — Logowanie</title>
 <style>""" + BASE_STYLE + """
 .center { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+
 .card { background: #162032; border: 1px solid #1e3a5f; border-radius: 16px; padding: 40px; width: 100%; max-width: 380px; }
 .logo { font-size: 28px; font-weight: 800; color: #f0c040; text-align: center; margin-bottom: 8px; }
 .subtitle { text-align: center; color: #90caf9; font-size: 13px; margin-bottom: 32px; }
@@ -174,6 +175,17 @@ label { display: block; font-size: 12px; color: #90caf9; margin-bottom: 6px; fon
 .name-option span { font-weight: 600; font-size: 14px; }
 .link { text-align: center; margin-top: 15px; font-size: 13px; color: #546e7a; }
 .link a { color: #90caf9; }
+.user-avatar {
+    width: 35px !important;    /* !important wymusza mały rozmiar */
+    height: 35px !important;
+    min-width: 35px;           /* zapobiega ściskaniu przez flexboxa */
+    border-radius: 50%;
+    object-fit: cover;         /* klucz: wycina środek zdjęcia, żeby nie było jajem */
+    margin-right: 12px;
+    border: 1px solid #1e3a5f;
+    display: block;            /* zapewnia poprawne wyświetlanie w divie */
+}
+.player-name { flex: 1; font-size: 16px; font-weight: 600; }
 </style></head><body>
 <div class="center">
   <div class="card">
@@ -547,6 +559,9 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
     {% for u in users %}
     <div class="leaderboard-row">
       <div class="rank {% if loop.index == 1 %}gold{% elif loop.index == 2 %}silver{% elif loop.index == 3 %}bronze{% endif %}">{{ loop.index }}</div>
+      
+      <img src="{{ u.avatar_url }}" class="user-avatar" alt="{{ u.username }}" width="35" height="35">
+      
       <div class="player-name">{{ u.username }}</div>
       <div class="points">{{ u.points }} <span>pkt</span></div>
     </div>
@@ -701,6 +716,18 @@ def index():
     tab = request.args.get('tab', 'mecze')
     current_user = db.session.get(User, session['user_id'])
     users = User.query.filter_by(is_admin=False).order_by(User.points.desc()).all()
+    
+    for u in users:
+        # Sprawdzamy czy plik istnieje. Zakładamy, że plik nazywa się dokładnie jak u.username
+        img_filename = f"{u.username}.jpg"
+        img_path = os.path.join(app.root_path, 'static', 'avatars', img_filename)
+        
+        if os.path.exists(img_path):
+            u.avatar_url = f"/static/avatars/{img_filename}"
+        else:
+            # Domyślny awatar, jeśli plik nie istnieje (dostosuj nazwę pliku domyślnego)
+            u.avatar_url = "/static/avatars/default.jpg"
+    
     mecze = pobierz_mecze()
     teraz = datetime.now().replace(tzinfo=None) # Dzięki ustawieniom na górze, teraz to czas lokalny (PL)
 

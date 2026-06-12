@@ -176,14 +176,9 @@ label { display: block; font-size: 12px; color: #90caf9; margin-bottom: 6px; fon
 .link { text-align: center; margin-top: 15px; font-size: 13px; color: #546e7a; }
 .link a { color: #90caf9; }
 .user-avatar {
-    width: 35px !important;    /* !important wymusza mały rozmiar */
-    height: 35px !important;
-    min-width: 35px;           /* zapobiega ściskaniu przez flexboxa */
-    border-radius: 50%;
-    object-fit: cover;         /* klucz: wycina środek zdjęcia, żeby nie było jajem */
-    margin-right: 12px;
-    border: 1px solid #1e3a5f;
-    display: block;            /* zapewnia poprawne wyświetlanie w divie */
+    border-radius: 50%;      /* robi kółko */
+    object-fit: cover;       /* wycina zdjęcie do kwadratu, żeby nie było jajem */
+    border: 1px solid #1e3a5f; /* opcjonalna ramka */
 }
 .player-name { flex: 1; font-size: 16px; font-weight: 600; }
 </style></head><body>

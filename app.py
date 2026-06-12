@@ -450,6 +450,7 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
   {% set nadchodzace = mecze | selectattr('status', 'in', ['TIMED', 'SCHEDULED', 'IN_PLAY', 'PAUSED', 'LIVE']) | list %}
   {% if not nadchodzace %}<p class="empty">Brak nadchodzących meczów.</p>{% endif %}
   {% for mecz in nadchodzace %}
+  {% if mecz.home and mecz.home != 'None' and mecz.away and mecz.away != 'None' %}
   {% set czas_do_meczu = (mecz.date - teraz).total_seconds() / 60 %}
   {% set zablokowany = czas_do_meczu <= 60 or mecz.status in ('IN_PLAY', 'PAUSED', 'LIVE') %}
   <div class="match-card">
@@ -492,6 +493,7 @@ main { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
       </div>
     {% endif %}
   </div>
+  {% endif %}
   {% endfor %}
 
 {% elif tab == 'historia' %}
